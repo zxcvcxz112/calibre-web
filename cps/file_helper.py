@@ -21,16 +21,26 @@ import os
 import shutil
 import zipfile
 import mimetypes
-import copy
 from io import BytesIO
-try:
-    import magic
-except ImportError:
-    pass
 
 from . import logger
 
 log = logger.create()
+
+try:
+    import magic
+    error = None
+except ImportError as e:
+    error = "Cannot import python-magic, checking uploaded file metadata will not work: {}".format(e)
+
+
+def get_mimetype(ext):
+    # overwrite some mimetypes for proper file detection
+    mimes = {".fb2": "text/xml",
+             ".cbz": "application/zip",
+             ".cbr": "application/x-rar"
+             }
+    return mimes.get(ext, mimetypes.types_map[ext])
 
 
 def get_temp_dir():
@@ -46,12 +56,15 @@ def del_temp_dir():
 
 
 def validate_mime_type(file_buffer, allowed_extensions):
+    if error:
+        log.error(error)
+        return False
     mime = magic.Magic(mime=True)
-    allowed_mimetypes =list()
+    allowed_mimetypes = list()
     for x in allowed_extensions:
         try:
-            allowed_mimetypes.append(mimetypes.types_map["." + x])
-        except KeyError as e:
+            allowed_mimetypes.append(get_mimetype("." + x))
+        except KeyError:
             log.error("Unkown mimetype for Extension: {}".format(x))
     tmp_mime_type = mime.from_buffer(file_buffer.read())
     file_buffer.seek(0)
@@ -66,6 +79,5 @@ def validate_mime_type(file_buffer, allowed_extensions):
                     return True
         except:
             file_buffer.seek(0)
-            pass
-    
+    log.error("Mimetype '{}' not found in allowed types".format(tmp_mime_type))
     return False
